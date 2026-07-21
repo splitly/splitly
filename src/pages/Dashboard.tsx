@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Users, Plus, ArrowUpRight, ArrowDownRight, Wallet, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -193,29 +193,6 @@ export function Dashboard() {
 
     </div>
   );
-}
-
-function BalanceCard({ title, amount, trend, icon, bg, delay }: any) {
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, delay }}
-      className="bg-card border border-border rounded-[2rem] p-6 shadow-sm relative overflow-hidden group hover:shadow-md transition-all"
-    >
-      <div className={`absolute -right-6 -top-6 h-32 w-32 rounded-full ${bg} opacity-20 blur-2xl group-hover:opacity-40 transition-opacity`}></div>
-      <div className="flex justify-between items-start mb-4 relative z-10">
-        <div className={`h-12 w-12 rounded-2xl ${bg} flex items-center justify-center`}>
-          {icon}
-        </div>
-        <span className={`text-sm font-medium ${trend === 'Live' ? 'text-primary' : trend.startsWith('+') ? 'text-success' : 'text-destructive'} bg-background px-2 py-1 rounded-md border border-border shadow-sm`}>
-          {trend}
-        </span>
-      </div>
-      <div className="relative z-10">
-        <p className="text-muted-foreground font-medium mb-1">{title}</p>
-        <h2 className="text-3xl font-semibold tracking-tight">{amount}</h2>
-      </div>
     </motion.div>
   );
 }

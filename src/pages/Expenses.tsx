@@ -1,5 +1,5 @@
 import { useAllExpenses } from "@/services/api";
-import { Loader2, Receipt, ArrowUpRight } from "lucide-react";
+import { Loader2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 

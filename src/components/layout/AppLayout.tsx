@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, CreditCard, PieChart, Settings, Bell, Search, Activity } from "lucide-react";
+import { LayoutDashboard, CreditCard, PieChart, Settings, Bell, Search, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
