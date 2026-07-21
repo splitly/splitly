@@ -70,8 +70,9 @@ export function useCreateGroup() {
 
       // 3. Add guest members if any
       if (newGroup.guests && newGroup.guests.length > 0) {
-        // Create guest profiles
+        // Create guest profiles with generated IDs since profiles.id doesn't have a default value
         const guestProfiles = newGroup.guests.map(guestName => ({
+          id: crypto.randomUUID(),
           first_name: guestName,
           is_guest: true
         }));
