@@ -193,8 +193,6 @@ export function Dashboard() {
 
     </div>
   );
-    </motion.div>
-  );
 }
 
 function BalanceCard({ title, amount, trend, icon, bg, delay }: any) {
