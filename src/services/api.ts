@@ -1,0 +1,178 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+
+// ==== PROFILES ====
+export function useProfile() {
+  return useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+// ==== GROUPS ====
+export function useGroups() {
+  return useQuery({
+    queryKey: ["groups"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // Fetch groups where the user is a member
+      const { data, error } = await supabase
+        .from("group_members")
+        .select(`
+          group_id,
+          groups (*)
+        `)
+        .eq("user_id", user.id);
+      
+      if (error) throw error;
+      return data.map((item: any) => item.groups);
+    },
+  });
+}
+
+export function useCreateGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ name, description }: { name: string, description: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // 1. Create the group
+      const { data: group, error: groupError } = await supabase
+        .from("groups")
+        .insert([{ name, description, created_by: user.id }])
+        .select()
+        .single();
+      
+      if (groupError) throw groupError;
+
+      // 2. Add creator as a member
+      const { error: memberError } = await supabase
+        .from("group_members")
+        .insert([{ group_id: group.id, user_id: user.id, role: "admin" }]);
+
+      if (memberError) throw memberError;
+
+      return group;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+    },
+  });
+}
+
+export function useGroupDetails(groupId: string) {
+  return useQuery({
+    queryKey: ["group", groupId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("groups")
+        .select(`
+          *,
+          group_members (
+            user_id,
+            role,
+            profiles (id, first_name, last_name, email, avatar_url)
+          ),
+          expenses (
+            id, title, amount, expense_date, paid_by,
+            profiles (id, first_name, last_name, avatar_url),
+            expense_splits (user_id, amount)
+          )
+        `)
+        .eq("id", groupId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!groupId
+  });
+}
+
+export function useAddMember() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ groupId, email }: { groupId: string, email: string }) => {
+      // 1. Find user by email in profiles
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .single();
+      
+      if (profileError || !profile) {
+        throw new Error("User not found. They must sign up first!");
+      }
+
+      // 2. Add to group_members
+      const { data, error } = await supabase
+        .from("group_members")
+        .insert([{ group_id: groupId, user_id: profile.id, role: "member" }])
+        .select();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
+    },
+  });
+}
+
+// ==== EXPENSES ====
+export function useAddExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      groupId, title, amount, paidBy, splits 
+    }: { 
+      groupId: string, title: string, amount: number, paidBy: string, 
+      splits: { userId: string, amount: number }[] 
+    }) => {
+      // 1. Create expense
+      const { data: expense, error: expenseError } = await supabase
+        .from("expenses")
+        .insert([{ group_id: groupId, title, amount, paid_by: paidBy }])
+        .select()
+        .single();
+      
+      if (expenseError) throw expenseError;
+
+      // 2. Create splits
+      const splitInserts = splits.map(s => ({
+        expense_id: expense.id,
+        user_id: s.userId,
+        amount: s.amount
+      }));
+
+      const { error: splitsError } = await supabase
+        .from("expense_splits")
+        .insert(splitInserts);
+
+      if (splitsError) throw splitsError;
+
+      return expense;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
+    },
+  });
+}
