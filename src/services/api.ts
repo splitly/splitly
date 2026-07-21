@@ -176,3 +176,64 @@ export function useAddExpense() {
     },
   });
 }
+
+// ==== EXTENDED DATA HOOKS ====
+export function useAllExpenses() {
+  return useQuery({
+    queryKey: ["all_expenses"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // First get all group IDs the user belongs to
+      const { data: members, error: memberError } = await supabase
+        .from("group_members")
+        .select("group_id")
+        .eq("user_id", user.id);
+      
+      if (memberError) throw memberError;
+      
+      if (!members || members.length === 0) return [];
+      
+      const groupIds = members.map((m: any) => m.group_id);
+
+      // Now fetch expenses for these groups
+      const { data, error } = await supabase
+        .from("expenses")
+        .select(`
+          *,
+          groups (name),
+          profiles (first_name, last_name, avatar_url)
+        `)
+        .in("group_id", groupIds)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (updates: { first_name?: string, last_name?: string, default_currency?: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    }
+  });
+}
