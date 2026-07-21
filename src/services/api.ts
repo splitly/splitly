@@ -108,6 +108,40 @@ export function useCreateGroup() {
   });
 }
 
+export function useDeleteGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (groupId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // Verify user is admin or creator
+      const { data: member } = await supabase
+        .from("group_members")
+        .select("role")
+        .eq("group_id", groupId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!member || member.role !== 'admin') {
+        throw new Error("Only group admins can delete the group");
+      }
+
+      const { error } = await supabase
+        .from("groups")
+        .delete()
+        .eq("id", groupId);
+        
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+    },
+  });
+}
+
 export function useGroupDetails(groupId: string) {
   return useQuery({
     queryKey: ["group", groupId],

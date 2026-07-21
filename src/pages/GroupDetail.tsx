@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useGroupDetails, useAddMember, useProfile } from "@/services/api";
+import { useGroupDetails, useAddMember, useProfile, useDeleteGroup } from "@/services/api";
 import { calculateOptimalSettlements } from "@/lib/balanceEngine";
 import { toast } from "sonner";
 
@@ -19,10 +19,27 @@ export function GroupDetail() {
   const { data: profile } = useProfile();
   const { data: group, isLoading, error } = useGroupDetails(id || "");
   const addMember = useAddMember();
+  const deleteGroup = useDeleteGroup();
 
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
+
+  const handleDeleteGroup = () => {
+    if (!id) return;
+    if (confirm("Are you sure you want to delete this group? All expenses and settlements will be permanently deleted.")) {
+      deleteGroup.mutate(id, {
+        onSuccess: () => {
+          toast.success("Group deleted successfully");
+          navigate("/dashboard");
+        },
+        onError: (err: any) => {
+          toast.error(`Error deleting group: ${err.message}`);
+        }
+      });
+    }
+  };
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,9 +143,35 @@ export function GroupDetail() {
                 <Button variant="ghost" size="icon" className="rounded-full bg-black/20 backdrop-blur-md hover:bg-black/40 text-white" onClick={() => toast("Search coming soon")}>
                   <Search className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="rounded-full bg-black/20 backdrop-blur-md hover:bg-black/40 text-white" onClick={() => toast("Settings coming soon")}>
-                  <Settings className="h-5 w-5" />
-                </Button>
+                <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-full bg-black/20 backdrop-blur-md hover:bg-black/40 text-white">
+                      <Settings className="h-5 w-5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px] rounded-3xl">
+                    <DialogHeader>
+                      <DialogTitle>Group Settings</DialogTitle>
+                      <DialogDescription>
+                        Manage your group preferences.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-6 flex flex-col gap-4">
+                      <Button 
+                        variant="destructive" 
+                        className="w-full rounded-xl flex items-center justify-center gap-2"
+                        onClick={handleDeleteGroup}
+                        disabled={deleteGroup.isPending}
+                      >
+                        {deleteGroup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Delete Group
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Only group admins can delete the group.
+                      </p>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
           </div>
