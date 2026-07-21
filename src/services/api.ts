@@ -48,25 +48,56 @@ export function useCreateGroup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ name, description }: { name: string, description: string }) => {
+    mutationFn: async (newGroup: { name: string, description?: string, guests?: string[] }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
 
       // 1. Create the group
       const { data: group, error: groupError } = await supabase
         .from("groups")
-        .insert([{ name, description, created_by: user.id }])
+        .insert([{ name: newGroup.name, description: newGroup.description, created_by: user.id }])
         .select()
         .single();
-      
+        
       if (groupError) throw groupError;
 
       // 2. Add creator as a member
       const { error: memberError } = await supabase
         .from("group_members")
-        .insert([{ group_id: group.id, user_id: user.id, role: "admin" }]);
-
+        .insert([{ group_id: group.id, user_id: user.id, role: 'admin' }]);
+        
       if (memberError) throw memberError;
+
+      // 3. Add guest members if any
+      if (newGroup.guests && newGroup.guests.length > 0) {
+        // Create guest profiles
+        const guestProfiles = newGroup.guests.map(guestName => ({
+          first_name: guestName,
+          is_guest: true
+        }));
+
+        const { data: createdGuests, error: guestError } = await supabase
+          .from("profiles")
+          .insert(guestProfiles)
+          .select('id');
+
+        if (guestError) throw guestError;
+
+        // Link guests to the group
+        if (createdGuests) {
+          const guestMembers = createdGuests.map(g => ({
+            group_id: group.id,
+            user_id: g.id,
+            role: 'member'
+          }));
+          
+          const { error: linkError } = await supabase
+            .from("group_members")
+            .insert(guestMembers);
+            
+          if (linkError) throw linkError;
+        }
+      }
 
       return group;
     },
@@ -234,6 +265,64 @@ export function useUpdateProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+    }
+  });
+}
+
+export function useJoinGroup() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (groupId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // Check if already a member
+      const { data: existing } = await supabase
+        .from("group_members")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("user_id", user.id)
+        .single();
+        
+      if (existing) return existing;
+
+      const { data, error } = await supabase
+        .from("group_members")
+        .insert([{ group_id: groupId, user_id: user.id, role: 'member' }])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, groupId) => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["group", groupId] });
+    }
+  });
+}
+
+export function useClaimProfile() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (guestProfileId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+
+      // Call the RPC function to transfer all data from the guest profile to the real profile
+      const { error } = await supabase.rpc('claim_guest_profile', { 
+        guest_profile_id: guestProfileId 
+      });
+        
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["group"] });
+      queryClient.invalidateQueries({ queryKey: ["all_expenses"] });
     }
   });
 }

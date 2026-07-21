@@ -17,16 +17,37 @@ export function Dashboard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDesc, setNewGroupDesc] = useState("");
+  const [guests, setGuests] = useState<string[]>([]);
+  const [guestName, setGuestName] = useState("");
+
+  const handleAddGuest = () => {
+    if (guestName.trim()) {
+      setGuests([...guests, guestName.trim()]);
+      setGuestName("");
+    }
+  };
+
+  const handleRemoveGuest = (index: number) => {
+    setGuests(guests.filter((_, i) => i !== index));
+  };
 
   const handleCreateGroup = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName) return;
     
-    createGroup.mutate({ name: newGroupName, description: newGroupDesc }, {
+    // Include the currently typed guest name if they forgot to click add
+    const finalGuests = [...guests];
+    if (guestName.trim()) {
+      finalGuests.push(guestName.trim());
+    }
+
+    createGroup.mutate({ name: newGroupName, description: newGroupDesc, guests: finalGuests }, {
       onSuccess: () => {
         setIsCreateOpen(false);
         setNewGroupName("");
         setNewGroupDesc("");
+        setGuests([]);
+        setGuestName("");
         toast.success("Group created successfully!");
       },
       onError: (error: any) => {
@@ -81,6 +102,55 @@ export function Dashboard() {
                       onChange={(e) => setNewGroupDesc(e.target.value)}
                       disabled={createGroup.isPending}
                     />
+                  </div>
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <label className="text-sm font-medium flex justify-between">
+                      <span>Add Members</span>
+                      <span className="text-muted-foreground font-normal text-xs">{guests.length} added</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="e.g. Rohit" 
+                        className="rounded-xl flex-1"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddGuest();
+                          }
+                        }}
+                        disabled={createGroup.isPending}
+                      />
+                      <Button 
+                        type="button" 
+                        variant="secondary" 
+                        className="rounded-xl"
+                        onClick={handleAddGuest}
+                        disabled={!guestName.trim() || createGroup.isPending}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                    {guests.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {guests.map((g, i) => (
+                          <div key={i} className="bg-secondary/50 px-3 py-1.5 rounded-full text-sm flex items-center gap-2">
+                            {g}
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveGuest(i)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      You can add members by name now, and share an invite link later so they can claim their profile.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>

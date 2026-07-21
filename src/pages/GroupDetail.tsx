@@ -162,10 +162,21 @@ export function GroupDetail() {
                   )}
                 </div>
                 
+                <Button 
+                  variant="secondary" 
+                  className="rounded-full shadow-sm"
+                  onClick={() => {
+                    const joinLink = `${window.location.origin}/join/${id}`;
+                    navigator.clipboard.writeText(joinLink);
+                    toast.success("Invite link copied to clipboard!");
+                  }}
+                >
+                  <Users className="mr-2 h-4 w-4" /> Share Link
+                </Button>
                 <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="rounded-full shadow-sm">
-                      <Users className="mr-2 h-4 w-4" /> Invite
+                      <Plus className="mr-2 h-4 w-4" /> Invite by Email
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[425px] rounded-3xl">
