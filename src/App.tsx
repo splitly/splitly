@@ -5,6 +5,7 @@ import { Signup } from "@/pages/Signup";
 import { Dashboard } from "@/pages/Dashboard";
 import { GroupDetail } from "@/pages/GroupDetail";
 import { AddExpense } from "@/pages/AddExpense";
+import { EditExpense } from "@/pages/EditExpense";
 import { Expenses } from "@/pages/Expenses";
 import { Activity } from "@/pages/Activity";
 import { Analytics } from "@/pages/Analytics";
@@ -26,6 +27,7 @@ function App() {
           {/* Protected Routes without Layout */}
           <Route path="/groups/:id" element={<AuthGuard><GroupDetail /></AuthGuard>} />
           <Route path="/expense/new" element={<AuthGuard><AddExpense /></AuthGuard>} />
+          <Route path="/expense/edit/:id" element={<AuthGuard><EditExpense /></AuthGuard>} />
           <Route path="/join/:id" element={<AuthGuard><JoinGroup /></AuthGuard>} />
           
           {/* Protected Routes WITH Layout */}

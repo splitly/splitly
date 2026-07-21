@@ -142,6 +142,67 @@ export function useDeleteGroup() {
   });
 }
 
+export function useAddGuestMember() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ groupId, guestName }: { groupId: string, guestName: string }) => {
+      // Create guest profile
+      const guestId = crypto.randomUUID();
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert([{ id: guestId, first_name: guestName, is_guest: true }]);
+        
+      if (profileError) throw profileError;
+      
+      // Add to group
+      const { data, error } = await supabase
+        .from("group_members")
+        .insert([{ group_id: groupId, user_id: guestId, role: 'member' }])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ["group", groupId] });
+    }
+  });
+}
+
+export function useRemoveMember() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ groupId, memberId }: { groupId: string, memberId: string }) => {
+      // Ensure member isn't involved in any expenses
+      const { data: splits } = await supabase
+        .from("expense_splits")
+        .select("id, expenses!inner(group_id)")
+        .eq("user_id", memberId)
+        .eq("expenses.group_id", groupId)
+        .limit(1);
+        
+      if (splits && splits.length > 0) {
+        throw new Error("Cannot remove member because they are involved in expenses.");
+      }
+      
+      const { error } = await supabase
+        .from("group_members")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("user_id", memberId);
+        
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: (_, { groupId }) => {
+      queryClient.invalidateQueries({ queryKey: ["group", groupId] });
+    }
+  });
+}
+
 export function useGroupDetails(groupId: string) {
   return useQuery({
     queryKey: ["group", groupId],
@@ -244,6 +305,120 @@ export function useAddExpense() {
 }
 
 // ==== EXTENDED DATA HOOKS ====
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      expenseId, title, amount, paidBy, splits 
+    }: { 
+      expenseId: string, groupId: string, title: string, amount: number, paidBy: string, 
+      splits: { userId: string, amount: number }[] 
+    }) => {
+      // 1. Update expense
+      const { data: expense, error: expenseError } = await supabase
+        .from("expenses")
+        .update({ title, amount, paid_by: paidBy })
+        .eq("id", expenseId)
+        .select()
+        .single();
+      
+      if (expenseError) throw expenseError;
+
+      // 2. Delete old splits
+      const { error: deleteError } = await supabase
+        .from("expense_splits")
+        .delete()
+        .eq("expense_id", expenseId);
+        
+      if (deleteError) throw deleteError;
+
+      // 3. Create new splits
+      const splitInserts = splits.map(s => ({
+        expense_id: expenseId,
+        user_id: s.userId,
+        amount: s.amount
+      }));
+
+      const { error: splitsError } = await supabase
+        .from("expense_splits")
+        .insert(splitInserts);
+
+      if (splitsError) throw splitsError;
+
+      return expense;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
+      queryClient.invalidateQueries({ queryKey: ["expense", variables.expenseId] });
+      queryClient.invalidateQueries({ queryKey: ["all_expenses"] });
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (expenseId: string) => {
+      const { error } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("id", expenseId);
+        
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["group"] });
+      queryClient.invalidateQueries({ queryKey: ["all_expenses"] });
+    },
+  });
+}
+
+export function useExpenseDetails(expenseId: string) {
+  return useQuery({
+    queryKey: ["expense", expenseId],
+    queryFn: async () => {
+      if (!expenseId) return null;
+      
+      const { data, error } = await supabase
+        .from("expenses")
+        .select(`
+          *,
+          expense_splits (user_id, amount),
+          groups (id, name, group_members (user_id, profiles (id, first_name, last_name, avatar_url)))
+        `)
+        .eq("id", expenseId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!expenseId
+  });
+}
+
+export function useRecordSettlement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ groupId, paidBy, paidTo, amount }: { groupId: string, paidBy: string, paidTo: string, amount: number }) => {
+      const { data, error } = await supabase
+        .from("settlements")
+        .insert([{ group_id: groupId, paid_by: paidBy, paid_to: paidTo, amount }])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
+    }
+  });
+}
+
 export function useAllExpenses() {
   return useQuery({
     queryKey: ["all_expenses"],

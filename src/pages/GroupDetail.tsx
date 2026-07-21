@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useGroupDetails, useAddMember, useProfile, useDeleteGroup } from "@/services/api";
+import { useGroupDetails, useAddMember, useProfile, useDeleteGroup, useRemoveMember, useAddGuestMember, useRecordSettlement } from "@/services/api";
 import { calculateOptimalSettlements } from "@/lib/balanceEngine";
 import { toast } from "sonner";
 
@@ -19,12 +19,64 @@ export function GroupDetail() {
   const { data: profile } = useProfile();
   const { data: group, isLoading, error } = useGroupDetails(id || "");
   const addMember = useAddMember();
+  const removeMember = useRemoveMember();
+  const addGuestMember = useAddGuestMember();
   const deleteGroup = useDeleteGroup();
+  const recordSettlement = useRecordSettlement();
 
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettleOpen, setIsSettleOpen] = useState(false);
+  const [settleAmount, setSettleAmount] = useState("");
+  const [settlePaidBy, setSettlePaidBy] = useState("");
+  const [settlePaidTo, setSettlePaidTo] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
+  const [newGuestName, setNewGuestName] = useState("");
+
+  const handleSettleUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !settleAmount || !settlePaidBy || !settlePaidTo) return;
+    
+    recordSettlement.mutate({
+      groupId: id,
+      paidBy: settlePaidBy,
+      paidTo: settlePaidTo,
+      amount: parseFloat(settleAmount)
+    }, {
+      onSuccess: () => {
+        setIsSettleOpen(false);
+        setSettleAmount("");
+        setSettlePaidBy("");
+        setSettlePaidTo("");
+        toast.success("Payment recorded successfully");
+      },
+      onError: (err: any) => toast.error(err.message)
+    });
+  };
+
+  const handleAddGuest = () => {
+    if (!id || !newGuestName.trim()) return;
+    addGuestMember.mutate({ groupId: id, guestName: newGuestName.trim() }, {
+      onSuccess: () => {
+        setNewGuestName("");
+        toast.success("Member added successfully");
+      },
+      onError: (err: any) => {
+        toast.error(err.message);
+      }
+    });
+  };
+
+  const handleRemoveMember = (memberId: string) => {
+    if (!id) return;
+    if (confirm("Are you sure you want to remove this member?")) {
+      removeMember.mutate({ groupId: id, memberId }, {
+        onSuccess: () => toast.success("Member removed"),
+        onError: (err: any) => toast.error(err.message)
+      });
+    }
+  };
 
   const handleDeleteGroup = () => {
     if (!id) return;
@@ -156,19 +208,68 @@ export function GroupDetail() {
                         Manage your group preferences.
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="py-6 flex flex-col gap-4">
-                      <Button 
-                        variant="destructive" 
-                        className="w-full rounded-xl flex items-center justify-center gap-2"
-                        onClick={handleDeleteGroup}
-                        disabled={deleteGroup.isPending}
-                      >
-                        {deleteGroup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        Delete Group
-                      </Button>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Only group admins can delete the group.
-                      </p>
+                    <div className="py-4 flex flex-col gap-6">
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-semibold">Members</h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 no-scrollbar">
+                          {group.group_members?.map((member: any) => (
+                            <div key={member.user_id} className="flex items-center justify-between p-2 rounded-xl bg-secondary/50">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback>{member.profiles?.first_name?.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm font-medium">{member.profiles?.first_name} {member.profiles?.id === profile?.id ? "(You)" : ""}</span>
+                              </div>
+                              {member.profiles?.id !== profile?.id && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-destructive h-8 text-xs hover:bg-destructive/10"
+                                  onClick={() => handleRemoveMember(member.user_id)}
+                                  disabled={removeMember.isPending}
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="flex gap-2 pt-2 border-t border-border">
+                          <Input 
+                            placeholder="Add member by name" 
+                            className="rounded-xl flex-1 text-sm h-9"
+                            value={newGuestName}
+                            onChange={(e) => setNewGuestName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddGuest()}
+                            disabled={addGuestMember.isPending}
+                          />
+                          <Button 
+                            variant="secondary" 
+                            size="sm"
+                            className="rounded-xl h-9 px-4"
+                            onClick={handleAddGuest}
+                            disabled={!newGuestName.trim() || addGuestMember.isPending}
+                          >
+                            {addGuestMember.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-border">
+                        <Button 
+                          variant="destructive" 
+                          className="w-full rounded-xl flex items-center justify-center gap-2"
+                          onClick={handleDeleteGroup}
+                          disabled={deleteGroup.isPending}
+                        >
+                          {deleteGroup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                          Delete Group
+                        </Button>
+                        <p className="text-[10px] text-muted-foreground text-center mt-2">
+                          Only group admins can delete the group.
+                        </p>
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -332,7 +433,11 @@ export function GroupDetail() {
                       }
 
                       return (
-                        <div key={ex.id} className="group flex items-center justify-between p-4 rounded-3xl bg-card border border-border/50 hover:border-border hover:shadow-md transition-all cursor-pointer">
+                        <div 
+                          key={ex.id} 
+                          className="group flex items-center justify-between p-4 rounded-3xl bg-card border border-border/50 hover:border-border hover:shadow-md transition-all cursor-pointer"
+                          onClick={() => navigate(`/expense/edit/${ex.id}`)}
+                        >
                           <div className="flex items-center gap-5">
                             <div className="h-14 w-14 rounded-[1.25rem] flex items-center justify-center text-2xl bg-secondary">
                               🧾
@@ -352,7 +457,7 @@ export function GroupDetail() {
                                  {actionText}
                                </p>
                             </div>
-                            <Button variant="ghost" size="icon" className="rounded-full opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => toast("Expense details coming soon")}>
+                            <Button variant="ghost" size="icon" className="rounded-full opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); navigate(`/expense/edit/${ex.id}`); }}>
                               <MoreVertical className="h-5 w-5 text-muted-foreground" />
                             </Button>
                           </div>
@@ -375,7 +480,16 @@ export function GroupDetail() {
                         <div className="p-4 text-center text-sm text-muted-foreground">All settled up!</div>
                       ) : (
                         settlements.map((s, i) => (
-                          <div key={i} className="flex items-center justify-between p-4 bg-secondary/30 rounded-2xl">
+                          <div 
+                            key={i} 
+                            className="flex items-center justify-between p-4 bg-secondary/30 rounded-2xl cursor-pointer hover:bg-secondary/50 transition-colors"
+                            onClick={() => {
+                              setSettlePaidBy(s.fromUserId);
+                              setSettlePaidTo(s.toUserId);
+                              setSettleAmount(s.amount.toString());
+                              setIsSettleOpen(true);
+                            }}
+                          >
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
                                   <AvatarImage src={getUserAvatar(s.fromUserId)} />
@@ -396,9 +510,76 @@ export function GroupDetail() {
                         ))
                       )}
                     </div>
-                    {settlements.length > 0 && (
-                      <Button className="w-full rounded-full h-12 shadow-md shadow-primary/20" onClick={() => toast("Settle up flows coming soon!")}>Record all as settled</Button>
-                    )}
+                    
+                    <Dialog open={isSettleOpen} onOpenChange={setIsSettleOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="w-full rounded-full h-12 shadow-md shadow-primary/20">Record a payment</Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px] rounded-3xl">
+                        <form onSubmit={handleSettleUp}>
+                          <DialogHeader>
+                            <DialogTitle>Record Payment</DialogTitle>
+                            <DialogDescription>
+                              Record a settlement or initial funding.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-6 py-6">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Who paid?</label>
+                              <select 
+                                className="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                value={settlePaidBy}
+                                onChange={(e) => setSettlePaidBy(e.target.value)}
+                                required
+                              >
+                                <option value="" disabled>Select member</option>
+                                {group.group_members?.map((m: any) => (
+                                  <option key={m.user_id} value={m.user_id}>{m.profiles?.first_name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Who received?</label>
+                              <select 
+                                className="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                value={settlePaidTo}
+                                onChange={(e) => setSettlePaidTo(e.target.value)}
+                                required
+                              >
+                                <option value="" disabled>Select member</option>
+                                {group.group_members?.map((m: any) => (
+                                  <option key={m.user_id} value={m.user_id}>{m.profiles?.first_name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Amount</label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">₹</span>
+                                <Input 
+                                  type="number"
+                                  placeholder="0.00" 
+                                  className="rounded-xl pl-7"
+                                  value={settleAmount}
+                                  onChange={(e) => setSettleAmount(e.target.value)}
+                                  disabled={recordSettlement.isPending}
+                                  required
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button type="submit" className="rounded-full w-full" disabled={recordSettlement.isPending || !settleAmount || !settlePaidBy || !settlePaidTo || settlePaidBy === settlePaidTo}>
+                              {recordSettlement.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              Record Payment
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+
                  </div>
               </motion.div>
             )}
